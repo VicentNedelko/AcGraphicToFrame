@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.8.34330.188
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AcGraphicToFrame", "AcGraphicToFrame.csproj", "{BCEBAD60-7CA6-4A4B-8C38-224A4318E017}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{BCEBAD60-7CA6-4A4B-8C38-224A4318E017}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BCEBAD60-7CA6-4A4B-8C38-224A4318E017}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BCEBAD60-7CA6-4A4B-8C38-224A4318E017}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BCEBAD60-7CA6-4A4B-8C38-224A4318E017}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {D3B4E129-585E-447E-A88C-F4CD3A8D1D41}
+	EndGlobalSection
+EndGlobal
