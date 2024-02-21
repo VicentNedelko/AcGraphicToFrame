@@ -8,7 +8,7 @@ namespace AcGraphicToFrame.Helpers
 {
     internal static class FormatHelper
     {
-        internal static string GetFormatValue(double modelHeight, double modelWidth)
+        internal static string GetFormatValue(double modelHeight, double modelWidth, double scale)
         {
             return "A3";
         }

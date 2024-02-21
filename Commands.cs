@@ -3,9 +3,9 @@ using AcGraphicToFrame.Helpers;
 using AcGraphicToFrame.Managers;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.Runtime;
+using OfficeOpenXml;
+using System.IO;
 using System.Linq;
-using DialogResult = System.Windows.Forms.DialogResult;
-using OpenFileDialog = Autodesk.AutoCAD.Windows.OpenFileDialog;
 
 namespace AcGraphicToFrame
 {
@@ -24,14 +24,26 @@ namespace AcGraphicToFrame
                 return;
             }
 
-            foreach(var file in selectedFilesNames)
+            var rootFolder = Path.GetDirectoryName(selectedFilesNames[0]);
+
+            var excelFileInfo = XlsxManager.GetExcelFileInfo(rootFolder);
+
+            using (var excel = new ExcelPackage(excelFileInfo))
             {
-                DwgManager.CloneDrawingToFrame(file);
+                var sheet = excel.Workbook.Worksheets[1];
+                for (var i = 0; i < selectedFilesNames.Count(); i++)
+                {
+                    var status = DwgManager.CloneDrawingToFrame(selectedFilesNames[i], sheet);
+                    XlsxManager.FillResult(sheet, status);
+                }
+
+                excel.Save();
+
+                Info fileProcessorInfo = new Info();
+                fileProcessorInfo.SetTextInfo($"DWG processed: {selectedFilesNames.Count()}");
+                Application.ShowModalDialog(null, fileProcessorInfo, false);
             }
 
-            Info fileProcessorInfo = new Info();
-            fileProcessorInfo.SetTextInfo($"DWG processed: {selectedFilesNames.Count()}");
-            Application.ShowModalDialog(null, fileProcessorInfo, false);
         }
     }
 }

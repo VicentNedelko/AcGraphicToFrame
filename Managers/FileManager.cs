@@ -1,4 +1,5 @@
-﻿using System;
+﻿using OfficeOpenXml;
+using System;
 using System.IO;
 using System.Linq;
 using DialogResult = System.Windows.Forms.DialogResult;
@@ -22,31 +23,19 @@ namespace AcGraphicToFrame.Helpers
             return openFileDialog.GetFilenames();
         }
 
-        internal static string GetPathToFrameFile(string formatName, string rootFolder)
+        internal static string GetPathToFrameFile(string formatName, string rootFolder, double scale) // TODO: manage scale value
         {
             var frameFileName = string.Concat(formatName, Constants.FileExtensionSeparator, Constants.DwgExtension);
             return Path.Combine(rootFolder, Constants.FramesFolderName, frameFileName);
         }
 
-        internal static string GetResultFileName(string rootFolder)
+        internal static string GetResultFileName(string[] indexes)
         {
-            var fullNameWithPath = GetCustomFramePath(rootFolder);
-            return Path.GetFileNameWithoutExtension(fullNameWithPath);
-        }
-
-        internal static string GetCustomFramePath(string rootFolder)
-        {
-            var customFrameFilePath = Path.Combine(rootFolder, Constants.CustomFramesFolder);
-            return Directory.GetFiles(customFrameFilePath, $"*.{Constants.DwgExtension}", SearchOption.TopDirectoryOnly).FirstOrDefault();
-        }
-
-        internal static void MoveCustomFrameToUsedFolder(string customFrameUsed, string rootFolder)
-        {
-            var customFrameName = Path.GetFileNameWithoutExtension(customFrameUsed);
-            var usedCustomFrameName = string.Concat(customFrameName, Constants.UsedFramePostfix, Constants.FileExtensionSeparator, Constants.DwgExtension);
-            var usedCustomFramePath = Path.Combine(rootFolder, Constants.UsedFramesFolderName, usedCustomFrameName);
-            File.Move(customFrameUsed, usedCustomFramePath);
-
+            return string.Concat(indexes[0], Constants.FileNameSeparator,
+                indexes[1], indexes[2], Constants.FileNameSeparator, 
+                Constants.FileNamePostfix, 
+                Constants.FileExtensionSeparator, 
+                Constants.DwgExtension);
         }
     }
 }

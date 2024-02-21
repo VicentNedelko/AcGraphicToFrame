@@ -2,6 +2,7 @@
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
+using OfficeOpenXml;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -12,129 +13,119 @@ namespace AcGraphicToFrame.Managers
     internal static class DwgManager
     {
         private static Vector3d FrameBorderCompensation = new Vector3d(7.5, 0, 0);
-        internal static void CloneDrawingToFrame(string file)
+
+        internal static string CloneDrawingToFrame(string dwgFile, ExcelWorksheet sheet)
         {
-            var rootFolder = Path.GetDirectoryName(file);
-            using (Database sourceDatabase = new Database(false, true))
+            var rootFolder = Path.GetDirectoryName(dwgFile);
+
+            try
             {
-                sourceDatabase.ReadDwgFile(file, FileOpenMode.OpenForReadAndAllShare, false, null);
-                sourceDatabase.CloseInput(true);
-
-                using (var sourceTransaction = sourceDatabase.TransactionManager.StartTransaction())
+                using (Database sourceDatabase = new Database(false, true))
                 {
-                    var sourceBlockTable = sourceTransaction.GetObject(sourceDatabase.BlockTableId, OpenMode.ForRead) as BlockTable;
-                    var sourceBlockTableRecord = sourceTransaction.GetObject(sourceBlockTable[BlockTableRecord.ModelSpace], OpenMode.ForRead) as BlockTableRecord;
-                    var sourceObjectIdCollection = new ObjectIdCollection();
-                    var sourceExtents = new Extents3d();
+                    sourceDatabase.ReadDwgFile(dwgFile, FileOpenMode.OpenForReadAndAllShare, false, null);
+                    sourceDatabase.CloseInput(true);
 
-                    var textHeightList = new List<int>();
-
-                    foreach (ObjectId sourceObjectId in sourceBlockTableRecord)
+                    using (var sourceTransaction = sourceDatabase.TransactionManager.StartTransaction())
                     {
-                        var sourceEntity = sourceTransaction.GetObject(sourceObjectId, OpenMode.ForRead) as Entity;
+                        var sourceBlockTable = sourceTransaction.GetObject(sourceDatabase.BlockTableId, OpenMode.ForRead) as BlockTable;
+                        var sourceBlockTableRecord = sourceTransaction.GetObject(sourceBlockTable[BlockTableRecord.ModelSpace], OpenMode.ForRead) as BlockTableRecord;
+                        var sourceObjectIdCollection = new ObjectIdCollection();
+                        var sourceExtents = new Extents3d();
 
-                        if (sourceObjectId.ObjectClass.IsDerivedFrom(RXObject.GetClass(typeof(DBText))))
+                        var textHeightList = new List<int>();
+
+                        foreach (ObjectId sourceObjectId in sourceBlockTableRecord)
                         {
-                            textHeightList.Add((int)Math.Truncate((double)sourceEntity.GetType().GetProperty("Height").GetValue(sourceEntity, null)));
+                            var sourceEntity = sourceTransaction.GetObject(sourceObjectId, OpenMode.ForRead) as Entity;
+
+                            if (sourceObjectId.ObjectClass.IsDerivedFrom(RXObject.GetClass(typeof(DBText))))
+                            {
+                                textHeightList.Add((int)Math.Truncate((double)sourceEntity.GetType().GetProperty("Height").GetValue(sourceEntity, null)));
+                            }
+
+                            sourceExtents.AddExtents(sourceEntity.GeometricExtents);
+                            sourceObjectIdCollection.Add(sourceObjectId);
                         }
 
-                        sourceExtents.AddExtents(sourceEntity.GeometricExtents);
-                        sourceObjectIdCollection.Add(sourceObjectId);
-                    }
+                        var scale = GetScaleFactor(textHeightList);
 
-                    var scale = GetScaleFactor(textHeightList);
+                        var sourceModelCenter = sourceExtents.MinPoint + (sourceExtents.MaxPoint - sourceExtents.MinPoint) * 0.5;
+                        var sourceHeight = sourceExtents.MaxPoint.Y - sourceExtents.MinPoint.Y;
+                        var sourceWidth = sourceExtents.MaxPoint.X - sourceExtents.MinPoint.X;
 
-                    var sourceModelCenter = sourceExtents.MinPoint + (sourceExtents.MaxPoint - sourceExtents.MinPoint) * 0.5;
-                    var sourceHeight = sourceExtents.MaxPoint.Y - sourceExtents.MinPoint.Y;
-                    var sourceLength = sourceExtents.MaxPoint.X - sourceExtents.MinPoint.X;
-                    Matrix3d matScale = Matrix3d.Scaling(scale, sourceModelCenter);
+                        IdMapping idMapping = new IdMapping();
 
-                    foreach (ObjectId sourceObjectId in sourceBlockTableRecord)
-                    {
-                        TransformDbCollection(sourceTransaction, matScale, sourceObjectId);
-                    }
+                        Extents3d destinationExt = new Extents3d();
 
-                    Extents3d scaledSourceExtents = new Extents3d();
-                    ObjectIdCollection scaledSourceObjIdCollection = new ObjectIdCollection();
+                        var formatValue = FormatHelper.GetFormatValue(sourceHeight, sourceWidth, scale);
 
-                    foreach (ObjectId sourceObjectId in sourceBlockTableRecord)
-                    {
-                        var sourceEntity = sourceTransaction.GetObject(sourceObjectId, OpenMode.ForRead) as Entity;
-
-                        scaledSourceExtents.AddExtents(sourceEntity.GeometricExtents);
-                        scaledSourceObjIdCollection.Add(sourceObjectId);
-                    }
-
-                    var scaledModelCenter = scaledSourceExtents.MinPoint + (scaledSourceExtents.MaxPoint - scaledSourceExtents.MinPoint) * 0.5;
-                    var scaledSourceHeight = scaledSourceExtents.MaxPoint.Y - scaledSourceExtents.MinPoint.Y;
-                    var scaledSourceWidth = scaledSourceExtents.MaxPoint.X - scaledSourceExtents.MinPoint.X;
-
-                    IdMapping idMapping = new IdMapping();
-
-                    Extents3d destinationExt = new Extents3d();
-
-                    var formatValue = FormatHelper.GetFormatValue(scaledSourceHeight, scaledSourceWidth);
-
-                    using (Database destinationDatabase = new Database(false, true))
-                    {
-                        var pathToFrame = FileManager.GetPathToFrameFile(formatValue, rootFolder);
-                        destinationDatabase.ReadDwgFile(pathToFrame, FileOpenMode.OpenForReadAndWriteNoShare, false, null);
-                        destinationDatabase.CloseInput(true);
-
-                        using (var destinationTransaction = destinationDatabase.TransactionManager.StartTransaction())
+                        using (Database destinationDatabase = new Database(false, true))
                         {
-                            var destBlockTable = destinationTransaction.GetObject(destinationDatabase.BlockTableId, OpenMode.ForRead) as BlockTable;
-                            var destinationBlockTableRecord = destinationTransaction.GetObject(destBlockTable[BlockTableRecord.ModelSpace], OpenMode.ForRead) as BlockTableRecord;
+                            var pathToFrame = FileManager.GetPathToFrameFile(formatValue, rootFolder, scale);
+                            destinationDatabase.ReadDwgFile(pathToFrame, FileOpenMode.OpenForReadAndWriteNoShare, false, null);
+                            destinationDatabase.CloseInput(true);
 
-                            var customFrameFileName = FileManager.GetCustomFramePath(rootFolder);
-                            var resultFileName = Path.GetFileNameWithoutExtension(customFrameFileName);
+                            var freeRowIndex = XlsxManager.GetFreeRowIndex(sheet);
+                            var indexes = GetIndexesTable(sheet, freeRowIndex);
 
-                            var indexes = GetCustomFrameIndexes(resultFileName);
-
-                            foreach (ObjectId destObjectId in destinationBlockTableRecord)
+                            using (var destinationTransaction = destinationDatabase.TransactionManager.StartTransaction())
                             {
-                                var destEntity = destinationTransaction.GetObject(destObjectId, OpenMode.ForRead) as Entity;
+                                var destBlockTable = destinationTransaction.GetObject(destinationDatabase.BlockTableId, OpenMode.ForRead) as BlockTable;
+                                var destinationBlockTableRecord = destinationTransaction.GetObject(destBlockTable[BlockTableRecord.ModelSpace], OpenMode.ForRead) as BlockTableRecord;
 
-                                if (destObjectId.ObjectClass.IsDerivedFrom(RXClass.GetClass(typeof(BlockReference))))
+
+                                foreach (ObjectId destObjectId in destinationBlockTableRecord)
                                 {
-                                    SetFrameIndexes(destinationTransaction, destObjectId, indexes);
+                                    var destEntity = destinationTransaction.GetObject(destObjectId, OpenMode.ForRead) as Entity;
+
+                                    if (destObjectId.ObjectClass.IsDerivedFrom(RXClass.GetClass(typeof(BlockReference))))
+                                    {
+                                        SetFrameIndexes(destinationTransaction, destObjectId, indexes);
+                                    }
+
+                                    destinationExt.AddExtents(destEntity.GeometricExtents);
                                 }
 
-                                destinationExt.AddExtents(destEntity.GeometricExtents);
+                                var destinationModelCenter = destinationExt.MinPoint + (destinationExt.MaxPoint - destinationExt.MinPoint) * 0.5 + FrameBorderCompensation * scale;
+                                // TODO: add scale factor * to compensation
+
+                                Matrix3d matDisplacement = Matrix3d.Displacement(destinationModelCenter - sourceModelCenter);
+
+                                foreach (ObjectId objectId in sourceBlockTableRecord)
+                                {
+                                    TransformDbCollection(sourceTransaction, matDisplacement, objectId);
+                                }
+
+                                sourceTransaction.Commit();
+
+                                sourceDatabase.WblockCloneObjects(sourceObjectIdCollection, destinationBlockTableRecord.ObjectId, idMapping, DuplicateRecordCloning.Replace, false);
+
+                                destinationTransaction.Commit();
+
+                                var resultFileName = FileManager.GetResultFileName(indexes);
+                                var filename = string.Concat(resultFileName, Constants.FileExtensionSeparator);
+                                var resultFilePath = Path.Combine(rootFolder, Constants.ResultsFolderName, filename);
+                                destinationDatabase.SaveAs(resultFilePath, DwgVersion.Current);
+
+                                return "SUCCESS";
                             }
-
-                            var destinationModelCenter = destinationExt.MinPoint + (destinationExt.MaxPoint - destinationExt.MinPoint) * 0.5 + FrameBorderCompensation;
-
-                            Matrix3d matDisplacement = Matrix3d.Displacement(destinationModelCenter - sourceModelCenter);
-
-                            foreach (ObjectId objectId in sourceBlockTableRecord)
-                            {
-                                TransformDbCollection(sourceTransaction, matDisplacement, objectId);
-                            }
-
-                            sourceTransaction.Commit();
-
-                            sourceDatabase.WblockCloneObjects(sourceObjectIdCollection, destinationBlockTableRecord.ObjectId, idMapping, DuplicateRecordCloning.Replace, false);
-
-                            destinationTransaction.Commit();
-
-                            var filename = string.Concat(resultFileName, Constants.FileExtensionSeparator, Constants.DwgExtension);
-                            var resultFilePath = Path.Combine(rootFolder, Constants.ResultsFolderName, filename);
-                            destinationDatabase.SaveAs(resultFilePath, DwgVersion.Current);
-
-                            FileManager.MoveCustomFrameToUsedFolder(customFrameFileName, rootFolder);
                         }
                     }
                 }
             }
+            catch(System.Exception ex)
+            {
+                return ex.Message;
+            }
         }
 
-        private static string[] GetCustomFrameIndexes(string customFrameFileName)
+        private static string[] GetIndexesTable(ExcelWorksheet sheet, int freeRowIndex)
         {
-            var indexes = customFrameFileName.Split(Constants.FileNameSeparator).Take(2).ToArray();
-            var dokIndex = indexes[1].Substring(0, indexes[1].Length - 4);
-            indexes[1] = dokIndex;
-            return indexes;
+            var materialN = Math.Truncate((double)sheet.Cells[$"B{freeRowIndex}"].Value).ToString();
+            var documentN = Math.Truncate((double)sheet.Cells[$"C{freeRowIndex}"].Value).ToString();
+            var sheetN = sheet.Cells[$"D{freeRowIndex}"].Value.ToString();
+
+            return new[] { materialN, documentN, sheetN };
         }
 
         private static void SetFrameIndexes(Transaction transaction, ObjectId objectId, string[] indexes)
@@ -152,8 +143,8 @@ namespace AcGraphicToFrame.Managers
                     var attrReference = transaction.GetObject(attrId, OpenMode.ForRead) as AttributeReference;
                     switch (attrReference.Tag)
                     {
-                        case Constants.MATNR: UpdateAttribute(attrReference, indexes.First()); break;
-                        case Constants.DOKNR: UpdateAttribute(attrReference, indexes.Last()); break;
+                        case Constants.MATNR: UpdateAttribute(attrReference, indexes[0]); break;
+                        case Constants.DOKNR: UpdateAttribute(attrReference, indexes[1]); break;
                     }
                 }
             }
@@ -181,7 +172,7 @@ namespace AcGraphicToFrame.Managers
                 .Select(x => x.Key)
                 .FirstOrDefault();
 
-            return 1 / Math.Truncate(mostOccuringTextValue / 2.5);
+            return Math.Truncate(mostOccuringTextValue / 2.5);
         }
     }
 }

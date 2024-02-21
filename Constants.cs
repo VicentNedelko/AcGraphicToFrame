@@ -16,6 +16,10 @@
 
         internal const string DwgExtension = "DWG";
 
+        internal const string XlsxExtension = "xlsx";
+
+        internal const string ExcelFileName = "Protocol";
+
         internal const string FramesFolderName = "Frames";
 
         internal const string ResultsFolderName = "Results";
@@ -27,6 +31,8 @@
         internal const string UsedFramePostfix = "_Used";
 
         internal const char FileNameSeparator = '_';
+
+        internal const string FileNamePostfix = "-";
 
         internal const string FileExtensionSeparator = ".";
 
