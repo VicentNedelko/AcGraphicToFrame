@@ -1,4 +1,5 @@
-﻿using AcGraphicToFrame.Helpers;
+﻿using AcGraphicToFrame.Exceptions;
+using AcGraphicToFrame.Helpers;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.Geometry;
 using Autodesk.AutoCAD.Runtime;
@@ -7,14 +8,13 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Windows;
 
 namespace AcGraphicToFrame.Managers
 {
     internal static class DwgManager
     {
-        private static Vector3d FrameBorderCompensation = new Vector3d(7.5, 0, 0);
-
-        internal static string CloneDrawingToFrame(string dwgFile, ExcelWorksheet sheet)
+        internal static (string status, string fileName) CloneDrawingToFrame(string dwgFile, ExcelWorksheet sheet)
         {
             var rootFolder = Path.GetDirectoryName(dwgFile);
 
@@ -43,13 +43,16 @@ namespace AcGraphicToFrame.Managers
                                 textHeightList.Add((int)Math.Truncate((double)sourceEntity.GetType().GetProperty("Height").GetValue(sourceEntity, null)));
                             }
 
-                            sourceExtents.AddExtents(sourceEntity.GeometricExtents);
-                            sourceObjectIdCollection.Add(sourceObjectId);
+                            if (!(IsTeklaText(sourceObjectId, sourceEntity) || IsPlusLayerLine(sourceEntity) || IsWipeOutObject(sourceObjectId)))
+                            {
+                                sourceObjectIdCollection.Add(sourceObjectId);
+                                sourceExtents.AddExtents(sourceEntity.GeometricExtents);
+                            }
                         }
 
                         var scale = GetScaleFactor(textHeightList);
 
-                        var sourceModelCenter = sourceExtents.MinPoint + (sourceExtents.MaxPoint - sourceExtents.MinPoint) * 0.5;
+                        Point3d sourceRightUpCorner = new Point3d(sourceExtents.MaxPoint.X, sourceExtents.MaxPoint.Y, 0);
                         var sourceHeight = sourceExtents.MaxPoint.Y - sourceExtents.MinPoint.Y;
                         var sourceWidth = sourceExtents.MaxPoint.X - sourceExtents.MinPoint.X;
 
@@ -66,7 +69,7 @@ namespace AcGraphicToFrame.Managers
                             destinationDatabase.CloseInput(true);
 
                             var freeRowIndex = XlsxManager.GetFreeRowIndex(sheet);
-                            var indexes = GetIndexesTable(sheet, freeRowIndex);
+                            var indexes = XlsxManager.GetIndexesTable(sheet, freeRowIndex);
 
                             using (var destinationTransaction = destinationDatabase.TransactionManager.StartTransaction())
                             {
@@ -86,10 +89,9 @@ namespace AcGraphicToFrame.Managers
                                     destinationExt.AddExtents(destEntity.GeometricExtents);
                                 }
 
-                                var destinationModelCenter = destinationExt.MinPoint + (destinationExt.MaxPoint - destinationExt.MinPoint) * 0.5 + FrameBorderCompensation * scale;
-                                // TODO: add scale factor * to compensation
+                                Point3d destinationInnerRightUpCorner = new Point3d(destinationExt.MaxPoint.X - 10 * scale, destinationExt.MaxPoint.Y - 10 * scale, 0);
 
-                                Matrix3d matDisplacement = Matrix3d.Displacement(destinationModelCenter - sourceModelCenter);
+                                Matrix3d matDisplacement = Matrix3d.Displacement(destinationInnerRightUpCorner - sourceRightUpCorner);
 
                                 foreach (ObjectId objectId in sourceBlockTableRecord)
                                 {
@@ -104,28 +106,30 @@ namespace AcGraphicToFrame.Managers
 
                                 var resultFileName = FileManager.GetResultFileName(indexes);
                                 var filename = string.Concat(resultFileName, Constants.FileExtensionSeparator);
-                                var resultFilePath = Path.Combine(rootFolder, Constants.ResultsFolderName, filename);
+                                var resultFolderPath = Path.Combine(rootFolder, Constants.ResultsFolderName);
+                                if (!Directory.Exists(resultFolderPath))
+                                {
+                                    Directory.CreateDirectory(resultFolderPath);
+                                }
+                                var resultFilePath = Path.Combine(resultFolderPath, filename);
                                 destinationDatabase.SaveAs(resultFilePath, DwgVersion.Current);
 
-                                return "SUCCESS";
+                                return ("SUCCESS", dwgFile);
                             }
                         }
                     }
                 }
             }
-            catch(System.Exception ex)
+            catch (MissedCustomInfoException ex)
             {
-                return ex.Message;
+                MessageBox.Show(ex.Message, "Protocol ERROR", MessageBoxButton.OK, MessageBoxImage.Error, MessageBoxResult.OK);
+                throw;
             }
-        }
-
-        private static string[] GetIndexesTable(ExcelWorksheet sheet, int freeRowIndex)
-        {
-            var materialN = Math.Truncate((double)sheet.Cells[$"B{freeRowIndex}"].Value).ToString();
-            var documentN = Math.Truncate((double)sheet.Cells[$"C{freeRowIndex}"].Value).ToString();
-            var sheetN = sheet.Cells[$"D{freeRowIndex}"].Value.ToString();
-
-            return new[] { materialN, documentN, sheetN };
+            catch (System.Exception ex)
+            {
+                MessageBox.Show($"{ex.Message}.\nCheck Protocol.xlsx for more information.", "DWG processor", MessageBoxButton.OK, MessageBoxImage.Error);
+                return (string.Concat("ERROR - ", ex.Message), dwgFile);
+            }
         }
 
         private static void SetFrameIndexes(Transaction transaction, ObjectId objectId, string[] indexes)
@@ -138,7 +142,7 @@ namespace AcGraphicToFrame.Managers
             {
                 var blockAttrs = blockReference.AttributeCollection;
 
-                foreach(ObjectId attrId in blockAttrs)
+                foreach (ObjectId attrId in blockAttrs)
                 {
                     var attrReference = transaction.GetObject(attrId, OpenMode.ForRead) as AttributeReference;
                     switch (attrReference.Tag)
@@ -173,6 +177,22 @@ namespace AcGraphicToFrame.Managers
                 .FirstOrDefault();
 
             return Math.Truncate(mostOccuringTextValue / 2.5);
+        }
+
+        private static bool IsTeklaText(ObjectId objectId, Entity entity) // add transaction
+        {
+            return objectId.ObjectClass.IsDerivedFrom(RXObject.GetClass(typeof(DBText)))
+                && (string)entity.GetType().GetProperty("TextString").GetValue(entity, null) == "Tekla structures";
+        }
+
+        private static bool IsPlusLayerLine(Entity entity)
+        {
+            return entity.Layer == "+";
+        }
+
+        private static bool IsWipeOutObject(ObjectId objectId)
+        {
+            return objectId.ObjectClass.IsDerivedFrom(RXObject.GetClass(typeof(Wipeout)));
         }
     }
 }

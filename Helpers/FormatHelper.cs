@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using AcGraphicToFrame.Exceptions;
 
 namespace AcGraphicToFrame.Helpers
 {
@@ -10,7 +6,22 @@ namespace AcGraphicToFrame.Helpers
     {
         internal static string GetFormatValue(double modelHeight, double modelWidth, double scale)
         {
-            return "A3";
+            if (((Constants.HeightA3 - 20) * scale) > modelHeight && (Constants.WidthA3 - 20) * scale > modelWidth)
+            {
+                return "A3";
+            }
+            else if (((Constants.HeightA2 - 20) * scale) > modelHeight && (Constants.WidthA2 - 20) * scale > modelWidth)
+            {
+                return "A2";
+            }
+            else if (((Constants.HeightA1 - 20) * scale) > modelHeight && (Constants.WidthA1 - 20) * scale > modelWidth)
+            {
+                return "A1";
+            }
+            else
+            {
+                throw new FormatNotFoundException($"Unable to find format name for this drawing: HEIGHT - {modelHeight}, WIDTH - {modelWidth}, SCALE - {scale}");
+            };
         }
     }
 }

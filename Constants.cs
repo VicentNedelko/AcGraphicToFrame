@@ -24,8 +24,6 @@
 
         internal const string ResultsFolderName = "Results";
 
-        internal const string UsedFramesFolderName = "UsedFrames";
-
         internal const string CustomFramesFolder = "Custom";
 
         internal const string UsedFramePostfix = "_Used";
