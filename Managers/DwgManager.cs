@@ -65,6 +65,10 @@ namespace AcGraphicToFrame.Managers
                         using (Database destinationDatabase = new Database(false, true))
                         {
                             var pathToFrame = FileManager.GetPathToFrameFile(formatValue, rootFolder, scale);
+                            if (!File.Exists(pathToFrame))
+                            {
+                                throw new FileNotFoundException($"Frames for scale {scale} not found! Check Frames folder.");
+                            }
                             destinationDatabase.ReadDwgFile(pathToFrame, FileOpenMode.OpenForReadAndWriteNoShare, false, null);
                             destinationDatabase.CloseInput(true);
 
@@ -125,6 +129,11 @@ namespace AcGraphicToFrame.Managers
                 MessageBox.Show(ex.Message, "Protocol ERROR", MessageBoxButton.OK, MessageBoxImage.Error, MessageBoxResult.OK);
                 throw;
             }
+            catch (FileNotFoundException ex)
+            {
+                MessageBox.Show(ex.Message, "Frames ERROR", MessageBoxButton.OK, MessageBoxImage.Error, MessageBoxResult.OK);
+                return (string.Concat("ERROR - ", ex.Message), dwgFile);
+            }
             catch (System.Exception ex)
             {
                 MessageBox.Show($"{ex.Message}.\nCheck Protocol.xlsx for more information.", "DWG processor", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -176,7 +185,7 @@ namespace AcGraphicToFrame.Managers
                 .Select(x => x.Key)
                 .FirstOrDefault();
 
-            return Math.Truncate(mostOccuringTextValue / 2.5);
+            return Math.Round(mostOccuringTextValue / 2.5);
         }
 
         private static bool IsTeklaText(ObjectId objectId, Entity entity) // add transaction

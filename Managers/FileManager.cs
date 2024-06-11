@@ -27,11 +27,20 @@ namespace AcGraphicToFrame.Helpers
             string formatFolderName = string.Empty;
             switch (scale)
             {
+                case 20:
+                    formatFolderName = "1_20";
+                    break;
+                case 15:
+                    formatFolderName = "1_15";
+                    break;
                 case 10:
                     formatFolderName = "1_10";
                     break;
-                case 20:
-                    formatFolderName = "1_20";
+                case 5:
+                    formatFolderName = "1_5";
+                    break;
+                case 2:
+                    formatFolderName = "1_2";
                     break;
             };
 
