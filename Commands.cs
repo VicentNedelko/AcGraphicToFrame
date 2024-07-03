@@ -3,6 +3,8 @@ using AcGraphicToFrame.Helpers;
 using AcGraphicToFrame.Managers;
 using Autodesk.AutoCAD.Runtime;
 using OfficeOpenXml;
+using System;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Windows;
@@ -24,6 +26,22 @@ namespace AcGraphicToFrame
             }
 
             var rootFolder = Path.GetDirectoryName(selectedFilesNames[0]);
+
+            var promptDivider = Active.Editor.GetString("\nEnter divider value:");
+
+            if (promptDivider.Status != Autodesk.AutoCAD.EditorInput.PromptStatus.OK)
+            {
+                MessageBox.Show("Divder value fault.", "Divider value ERROR", MessageBoxButton.OK, MessageBoxImage.Error, MessageBoxResult.OK);
+
+                return;
+            }
+
+            if (!Double.TryParse(promptDivider.StringResult, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var divider))
+            {
+                MessageBox.Show("Divider format error.", "Divider format ERROR", MessageBoxButton.OK, MessageBoxImage.Error, MessageBoxResult.OK);
+
+                return;
+            }
 
             try
             {
@@ -47,7 +65,7 @@ namespace AcGraphicToFrame
 
                         try
                         {
-                            (status, fileName) = DwgManager.CloneDrawingToFrame(selectedFilesNames[i], sheet);
+                            (status, fileName) = DwgManager.CloneDrawingToFrame(selectedFilesNames[i], sheet, divider);
                             XlsxManager.FillResult(sheet, status, fileName);
                         }
                         catch (MissedCustomInfoException)

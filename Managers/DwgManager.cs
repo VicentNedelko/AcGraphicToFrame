@@ -14,7 +14,7 @@ namespace AcGraphicToFrame.Managers
 {
     internal static class DwgManager
     {
-        internal static (string status, string fileName) CloneDrawingToFrame(string dwgFile, ExcelWorksheet sheet)
+        internal static (string status, string fileName) CloneDrawingToFrame(string dwgFile, ExcelWorksheet sheet, double divider)
         {
             var rootFolder = Path.GetDirectoryName(dwgFile);
 
@@ -45,12 +45,18 @@ namespace AcGraphicToFrame.Managers
 
                             if (!(IsTeklaText(sourceObjectId, sourceEntity) || IsPlusLayerLine(sourceEntity) || IsWipeOutObject(sourceObjectId)))
                             {
-                                sourceObjectIdCollection.Add(sourceObjectId);
-                                sourceExtents.AddExtents(sourceEntity.GeometricExtents);
+                                try
+                                {
+                                    sourceExtents.AddExtents(sourceEntity.GeometricExtents);
+                                    sourceObjectIdCollection.Add(sourceObjectId);
+                                }
+                                catch (Autodesk.AutoCAD.Runtime.Exception)
+                                {
+                                }
                             }
                         }
 
-                        var scale = GetScaleFactor(textHeightList);
+                        var scale = GetScaleFactor(textHeightList, divider);
 
                         Point3d sourceRightUpCorner = new Point3d(sourceExtents.MaxPoint.X, sourceExtents.MaxPoint.Y, 0);
                         var sourceHeight = sourceExtents.MaxPoint.Y - sourceExtents.MinPoint.Y;
@@ -178,14 +184,14 @@ namespace AcGraphicToFrame.Managers
             entity.DowngradeOpen();
         }
 
-        private static double GetScaleFactor(List<int> textHeightList)
+        private static double GetScaleFactor(List<int> textHeightList, double divider)
         {
             var mostOccuringTextValue = textHeightList.GroupBy(x => x)
                 .OrderByDescending(group => group.Count())
                 .Select(x => x.Key)
                 .FirstOrDefault();
 
-            return Math.Round(mostOccuringTextValue / 2.5);
+            return Math.Round(mostOccuringTextValue / divider);
         }
 
         private static bool IsTeklaText(ObjectId objectId, Entity entity) // add transaction
